@@ -1,0 +1,410 @@
+service:
+  name: creatgroups
+# app and org for use with dashboard.serverless.com
+#app: your-app-name
+#org: your-org-name
+
+  
+
+# Add the serverless-webpack plugin
+plugins:
+  - serverless-webpack
+  - serverless-aws-documentation
+  - serverless-reqvalidator-plugin
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+  stage : ${opt:stage,'dev'}
+  region: ${opt:region, 'us-east-2'}
+
+  environment:
+    GROUP_TABLE : Groups-${self:provider.stage}
+    IMAGE_TABLE: Image-${self:provider.stage}
+    CONNECTION_TABLE: Connection-${self:provider.stage}
+    IMAGE_ID_INDEX: ImageIdIndex
+    IMAGES_S3_BUCKET: servlerss-udagram-images-${self:provider.stage}
+    RESIZEIMAGES_S3_BUCKET: servlerss-udagram-resizeimages-${self:provider.stage}
+    SIGNED_URL_EXPIRATION: 300
+    # we have added this secret which is the auth 0 secret. commenting it as of now
+    # AUTH_0_SECRET: Y4j5R6ubzBkOL1zN4dgDI86pk75JVP9hH1QpSfL67ITf3Utir0D-KHsXpnYqweMx
+    AUTH_0_SECRET_ID: Auth0Secret-${self:provider.stage}
+    AUTH_0_SECRET_FIELD: auth0Secret
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - Dynamodb:Scan
+        - Dynamodb:PutItem
+        - Dynamodb:GetItem
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.GROUP_TABLE}
+    - Effect: Allow
+      Action:
+        - Dynamodb:Query
+        - Dynamodb:PutItem
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGE_TABLE}
+    - Effect: Allow
+      Action:
+        - Dynamodb:GetItem
+        - Dynamodb:PutItem
+        - Dynamodb:Scan
+        - Dynamodb:Query
+        - Dynamodb:DeleteItem
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.CONNECTION_TABLE}
+
+    - Effect: Allow
+      Action:
+        - Dynamodb:Query
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.IMAGE_TABLE}/index/${self:provider.environment.IMAGE_ID_INDEX}
+
+    - Effect: Allow
+      Action: 
+        - s3:PutObject 
+        - s3:GetObject 
+      Resource: arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}/*
+    - Effect: Allow
+      Action: 
+        - s3:PutObject 
+        - s3:GetObject 
+      Resource: arn:aws:s3:::${self:provider.environment.RESIZEIMAGES_S3_BUCKET}/*
+    - Effect: Allow
+      Action: 
+        - secretsmanager:GetSecretValue
+      Resource: !Ref Auth0Secret
+    - Effect: Allow
+      Action: 
+        - kms:Decrypt
+      Resource: !GetAtt KMSKey.Arn 
+
+
+custom:
+  webpack:
+    webpackConfig: ./webpack.config.js
+    includeModules: true
+
+  documentation:
+    api:
+      info:
+        version: v1.0.0
+        title: Udagram api
+        description: Serveless Application 
+    
+    models:
+      - name: GroupRequest
+        contentType: application/json
+        schema: ${file(models/create-group-request.json)}
+      - name: ImageRequest
+        contentType: application/json
+        schema: ${file(models/create-image-request.json)}
+    
+  topicName: imagesTopic-${self:provider.stage}
+functions:
+  GetGroups:
+    handler: src/lambda/http/getGroups.handler
+    events:
+      - http:
+          method: get
+          path: Groups
+          cors: true
+        
+  CreateGroup:
+    handler: src/lambda/http/createGroups.handler
+    events:
+      - http:
+          method: post 
+          path: Groups
+          cors: true
+          authorizer: Auth
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Create a new group
+            description: Create a new group
+            requestModels:
+              'application/json': GroupRequest
+    
+  GetImages:
+    handler: src/lambda/http/getImages.handler
+    events:
+      - http:
+          method: get 
+          path: Groups/{groupId}/Image
+          cors: true
+          
+  CreateImage:
+    handler: src/lambda/http/createImages.handler
+    events:
+      - http:
+          method: post 
+          path: Groups/{groupId}/Image
+          cors: true
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Create a new image
+            description: Create a new image
+            requestModels:
+              'application/json': ImageRequest
+
+  GetImagesById:
+    handler: src/lambda/http/getImageByImageId.handler
+    events:
+      - http:
+          method: get 
+          path: Image/{imageId}
+          cors: true
+  
+  SendUploadNotifications:
+    environment:
+      STAGE: ${self:provider.stage}
+      REGION: ${self:provider.region}
+      API_ID:
+        Ref: WebsocketsApi
+    handler: src/lambda/s3/sendNotification.handler
+    events:
+      - sns:
+          arn:
+            Fn::Join:
+              - ':'
+              - - arn:aws:sns
+                - Ref: AWS::Region
+                - Ref: AWS::AccountId
+                - ${self:custom.topicName}
+          topicName: ${self:custom.topicName}
+
+  ConnectHandler:
+    handler: src/lambda/websocket/connect.handler
+    events:
+      - websocket:
+          route: $connect
+            
+  DisconnectHandler:
+    handler: src/lambda/websocket/disconnect.handler
+    events:
+      - websocket:
+          route: $disconnect
+
+  ResizeImageHandler:
+    handler: src/lambda/s3/resizeImage.handler
+    events:
+      - sns:
+          arn:
+            Fn::Join:
+              - ':'
+              - - arn:aws:sns
+                - Ref: AWS::Region
+                - Ref: AWS::AccountId
+                - ${self:custom.topicName}
+          topicName: ${self:custom.topicName}
+  
+  # authorizer function, which will authorize 
+  Auth:
+    handler: src/lambda/auth/authOAuthorizer.handler
+resources:
+  Resources:
+
+    RequestBodyValidator:
+      Type: AWS::ApiGateway::RequestValidator
+      Properties: 
+        Name: 'request-body-validator'
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ValidateRequestBody: true
+        ValidateRequestParameters: false
+
+    GroupsDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id 
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TableName : ${self:provider.environment.GROUP_TABLE}
+
+    ImagesDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: groupId 
+            AttributeType: S
+          - AttributeName: timestamp 
+            AttributeType: S
+          - AttributeName: imageId 
+            AttributeType: S
+          - AttributeName: title 
+            AttributeType: S
+        KeySchema:
+          - AttributeName: groupId
+            KeyType: HASH
+          - AttributeName: timestamp
+            KeyType: RANGE
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.IMAGE_ID_INDEX}
+            KeySchema:
+            - AttributeName: imageId
+              KeyType: HASH
+            Projection:
+              ProjectionType: ALL  
+        BillingMode: PAY_PER_REQUEST
+        TableName : ${self:provider.environment.IMAGE_TABLE}
+
+    ConnectionDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.CONNECTION_TABLE}
+
+    AttachmentsBucket:
+      Type: AWS::S3::Bucket 
+      Properties:
+        BucketName: ${self:provider.environment.IMAGES_S3_BUCKET}
+        NotificationConfiguration:
+          # the commented code is used to notify a lambda function where as the topic configuartion is used to notify a topic
+         # LambdaConfigurations:
+          #- Event: s3:ObjectCreated:*
+          #  Function: !GetAtt SendUploadNotificationsLambdaFunction.Arn 
+          TopicConfigurations:
+            - Event: s3:ObjectCreated:*
+              Topic: !Ref ImagesTopic
+        CorsConfiguration:
+          CorsRules:
+            -
+              AllowedOrigins:
+                - '*'
+              AllowedHeaders:
+                - '*'
+              AllowedMethods:
+                - GET 
+                - PUT 
+                - POST 
+                - DELETE
+                - HEAD 
+              MaxAge: 3000
+
+    # the below bucket is being created for the rezise image
+    ResizeImage:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.RESIZEIMAGES_S3_BUCKET}
+        CorsConfiguration:
+          CorsRules:
+            -
+              AllowedOrigins:
+                - '*'
+              AllowedHeaders:
+                - '*'
+              AllowedMethods:
+                - GET 
+                - PUT 
+                - POST 
+                - DELETE
+                - HEAD 
+              MaxAge: 3000
+
+    SendUploadNotificationsPermission:
+      Type: AWS::Lambda::Permission 
+      Properties:
+        FunctionName: !Ref SendUploadNotificationsLambdaFunction
+        Principal: s3.amazonaws.com
+        Action: lambda:InvokeFunction
+        SourceAccount: !Ref AWS::AccountId
+        SourceArn: arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}
+
+
+    # the bucket policy is the policy given to the resouce bucket where it is mentioned that the same can be used to access an object from it 
+    BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        PolicyDocument:
+          Id: MyPolicy
+          Version: "2012-10-17"
+          Statement:
+            - Sid: PublicReadForGetBucketObjects
+              Effect: Allow
+              Principal: '*'
+              Action: 's3:GetObject'
+              Resource: 'arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}/*'
+        Bucket: !Ref AttachmentsBucket
+    #the below is the topic which is created with the name as topic name
+    ImagesTopic:
+      Type: AWS::SNS::Topic 
+      Properties:
+        DisplayName: Images bucket Topic 
+        TopicName: ${self:custom.topicName}
+
+    # this policy is used by the S3 bucket to send notification to the topic mentioned above 
+    SNSTopicPolicy:
+      Type: AWS::SNS::TopicPolicy
+      Properties: 
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement: 
+            - Effect: Allow
+              Principal: 
+                AWS: '*'
+              Action: sns:Publish
+              Resource: 
+                !Ref ImagesTopic
+              Condition:
+                ArnLike:
+                  AWS:SourceArn: arn:aws:s3:::${self:provider.environment.IMAGES_S3_BUCKET}
+        Topics:
+          - !Ref ImagesTopic
+        
+    # adding a code for the cors header as well as some other code for api gateway 
+    GatewayResponseDefault4XX:
+      Type: 'AWS::ApiGateway::GatewayResponse'
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control-Allow-Header: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+          gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+        ResponseType: DEFAULT_4XX
+        RestApiId:
+          Ref: 'ApiGatewayRestApi'
+
+    # KMS key and gve permission to the root user to the key 
+
+    KMSKey:
+      Type: AWS::KMS::Key
+      Properties:
+        Description: KMS Key to encrpt Auth0 secret
+        KeyPolicy:
+          Version: '2010-10-17'
+          Id: key-default-1
+          Statement: 
+            - Sid: Allow Administration of the policy
+              Effect: Allow
+              Principal: 
+                AWS: 
+                  FN::Join:
+                    - ':'
+                    - - 'arn:aws:iam:'
+                      - Ref: AWS::AccountId
+                      - 'root'
+                Action:
+                  - 'kms:*'
+                Resource: '*'
+
+    
+    # name of the key 
+
+    KMSKeyAlias:
+      Type: AWS::KMS::Alias 
+      Properties:
+        AliasName: alias/auth0Key-${self:provider.stage}
+        TargetKeyId: !Ref KMSKey 
+
+    Auth0Secret:
+      Type: AWS::SecretManager::Secret 
+      Properties:
+        Name: ${self:provider.environment.AUTH_0_SECRET_ID}
+        Description: Auth0 Secret
+        KmsKeyId: !Ref KMSKey
