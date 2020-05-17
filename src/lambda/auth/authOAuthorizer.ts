@@ -71,11 +71,12 @@ async function verifyToken (authHeader: string) : Promise< JwtToken>{
 
     const split = authHeader.split(' ')
     const token = split[1]
-    const secretObject : any = await getSecret()
-    const secret = secretObject[secretField]
+
+    // const secretObject : any = await getSecret()
+    // const secret = secretObject[secretField]
 
   //  we are using this in case we stor the secret in the environment variable return  verify(token, auth0secret) as JwtToken
-  return  verify(token, secret) as JwtToken    
+  return  verify(token, auth0secret) as JwtToken    
 
 }
 

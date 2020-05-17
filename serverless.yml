@@ -27,9 +27,10 @@ provider:
     RESIZEIMAGES_S3_BUCKET: servlerss-udagram-resizeimages-${self:provider.stage}
     SIGNED_URL_EXPIRATION: 300
     # we have added this secret which is the auth 0 secret. commenting it as of now
-    # AUTH_0_SECRET: Y4j5R6ubzBkOL1zN4dgDI86pk75JVP9hH1QpSfL67ITf3Utir0D-KHsXpnYqweMx
-    AUTH_0_SECRET_ID: Auth0Secret-${self:provider.stage}
-    AUTH_0_SECRET_FIELD: auth0Secret
+    AUTH_0_SECRET: Y4j5R6ubzBkOL1zN4dgDI86pk75JVP9hH1QpSfL67ITf3Utir0D-KHsXpnYqweMx
+    # the below code is for the secret though the secret manager
+    # AUTH_0_SECRET_ID: Auth0Secret-${self:provider.stage}
+    # AUTH_0_SECRET_FIELD: auth0Secret
 
   iamRoleStatements:
     - Effect: Allow
@@ -67,14 +68,14 @@ provider:
         - s3:PutObject 
         - s3:GetObject 
       Resource: arn:aws:s3:::${self:provider.environment.RESIZEIMAGES_S3_BUCKET}/*
-    - Effect: Allow
-      Action: 
-        - secretsmanager:GetSecretValue
-      Resource: !Ref Auth0Secret
-    - Effect: Allow
-      Action: 
-        - kms:Decrypt
-      Resource: !GetAtt KMSKey.Arn 
+    # - Effect: Allow
+    #   Action: 
+    #     - secretsmanager:GetSecretValue
+    #   Resource: !Ref Auth0Secret
+    # - Effect: Allow
+    #   Action: 
+    #     - kms:Decrypt
+    #   Resource: !GetAtt KMSKey.Arn 
 
 
 custom:
@@ -372,39 +373,39 @@ resources:
 
     # KMS key and gve permission to the root user to the key 
 
-    KMSKey:
-      Type: AWS::KMS::Key
-      Properties:
-        Description: KMS Key to encrpt Auth0 secret
-        KeyPolicy:
-          Version: '2010-10-17'
-          Id: key-default-1
-          Statement: 
-            - Sid: Allow Administration of the policy
-              Effect: Allow
-              Principal: 
-                AWS: 
-                  FN::Join:
-                    - ':'
-                    - - 'arn:aws:iam:'
-                      - Ref: AWS::AccountId
-                      - 'root'
-                Action:
-                  - 'kms:*'
-                Resource: '*'
+    # KMSKey:
+    #   Type: AWS::KMS::Key
+    #   Properties:
+    #     Description: KMS Key to encrpt Auth0 secret
+    #     KeyPolicy:
+    #       Version: '2010-10-17'
+    #       Id: key-default-1
+    #       Statement: 
+    #         - Sid: Allow Administration of the policy
+    #           Effect: Allow
+    #           Principal: 
+    #             AWS: 
+    #               FN::Join:
+    #                 - ':'
+    #                 - - 'arn:aws:iam:'
+    #                   - Ref: AWS::AccountId
+    #                   - 'root'
+    #             Action:
+    #               - 'kms:*'
+    #             Resource: '*'
 
     
     # name of the key 
 
-    KMSKeyAlias:
-      Type: AWS::KMS::Alias 
-      Properties:
-        AliasName: alias/auth0Key-${self:provider.stage}
-        TargetKeyId: !Ref KMSKey 
+    # KMSKeyAlias:
+    #   Type: AWS::KMS::Alias 
+    #   Properties:
+    #     AliasName: alias/auth0Key-${self:provider.stage}
+    #     TargetKeyId: !Ref KMSKey 
 
-    Auth0Secret:
-      Type: AWS::SecretManager::Secret 
-      Properties:
-        Name: ${self:provider.environment.AUTH_0_SECRET_ID}
-        Description: Auth0 Secret
-        KmsKeyId: !Ref KMSKey
+    # Auth0Secret:
+    #   Type: AWS::SecretManager::Secret 
+    #   Properties:
+    #     Name: ${self:provider.environment.AUTH_0_SECRET_ID}
+    #     Description: Auth0 Secret
+    #     KmsKeyId: !Ref KMSKey
