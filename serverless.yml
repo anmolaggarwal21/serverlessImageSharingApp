@@ -19,8 +19,17 @@ plugins:
   # one half for beta testing and we provide the same to a small amount of customers
   - serverless-plugin-canary-deployments
   
+# adding below code so that the configuaration of lamda function is done individually, and the size is not big
+package:
+  individually: true 
 
 provider:
+
+  # enabled the tracing for the x- ray
+  tracing:
+    lambda: true
+    apiGateway: true 
+
   name: aws
   runtime: nodejs12.x
   stage : ${opt:stage,'dev'}

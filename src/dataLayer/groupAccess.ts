@@ -2,6 +2,9 @@ import {Group } from '../models/group'
 import { DocumentClient } from 'aws-sdk/clients/dynamodb';
 import * as AWS from 'aws-sdk';
 
+import  *  as AWSXRay from 'aws-xray-sdk'
+
+const XAWS = AWSXRay.captureAWS(AWS)
 export class GroupAccess{
 
     private readonly docClient: DocumentClient  = createDynamoDBClient()
@@ -35,15 +38,16 @@ export class GroupAccess{
     }
 }
 function createDynamoDBClient (){
-    if(process.env.IS_OFFLINE){
+    console.log(' process enc value is '+ process.env.IS_OFFLINE)
+    if(process.env.IS_OFFLINE == 'true'){
         console.log('Creating a local dynamo db instance');
-        return new AWS.DynamoDB.DocumentClient({
+        return new XAWS.DynamoDB.DocumentClient({
             region: 'localhost',
             endpoint : 'http://localhost:8000'
         })
     }
     else{
-        return new AWS.DynamoDB.DocumentClient();
+        return new XAWS.DynamoDB.DocumentClient();
     }
     }
 
