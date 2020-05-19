@@ -11,6 +11,10 @@ plugins:
   - serverless-webpack
   - serverless-aws-documentation
   - serverless-reqvalidator-plugin
+  # to run the serverless app locally 
+  - serverless-dynamodb-local
+  - serverless-offline 
+  
 
 provider:
   name: aws
@@ -31,7 +35,9 @@ provider:
     # the below code is for the secret though the secret manager
     # AUTH_0_SECRET_ID: Auth0Secret-${self:provider.stage}
     # AUTH_0_SECRET_FIELD: auth0Secret
-
+    # adding a variable IS_OFFLINE, so that we know tht whether we running the server locally or not, 
+    # if the value is true, then we are going to crete the dynamo db instance locally, else it wll not be a local instance
+    IS_OFFLINE: true
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -99,6 +105,20 @@ custom:
         schema: ${file(models/create-image-request.json)}
     
   topicName: imagesTopic-${self:provider.stage}
+
+  # configuration of the serverless app to run locally 
+  serverless-offline:
+    port: 3003
+  
+  dynamodb:
+    stages:
+      - dev
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+    
+
 functions:
   GetGroups:
     handler: src/lambda/http/getGroups.handler
@@ -233,8 +253,10 @@ resources:
             AttributeType: S
           - AttributeName: imageId 
             AttributeType: S
-          - AttributeName: title 
-            AttributeType: S
+          # we can add the title if want to , but it cannot be added for dynamo db local. 
+          #In dynamo db local#. we need to have the same attributes as that of key schema
+          #- AttributeName: title 
+          #  AttributeType: S
         KeySchema:
           - AttributeName: groupId
             KeyType: HASH

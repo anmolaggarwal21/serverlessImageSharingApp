@@ -9,6 +9,7 @@
   "dependencies": {
     "jimp": "^0.10.3",
     "jsonwebtoken": "^8.5.1",
+    "serverless-dynamodb-local": "^0.2.30",
     "source-map-support": "^0.5.10"
   },
   "devDependencies": {
@@ -17,6 +18,7 @@
     "aws-sdk": "^2.670.0",
     "fork-ts-checker-webpack-plugin": "^3.0.1",
     "serverless-aws-documentation": "^1.1.0",
+    "serverless-offline": "^6.1.5",
     "serverless-reqvalidator-plugin": "^1.0.3",
     "serverless-webpack": "^5.2.0",
     "ts-loader": "^5.3.3",
