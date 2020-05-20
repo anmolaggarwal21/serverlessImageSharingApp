@@ -11,8 +11,25 @@ plugins:
   - serverless-webpack
   - serverless-aws-documentation
   - serverless-reqvalidator-plugin
+  # to run the serverless app locally 
+  - serverless-dynamodb-local
+  - serverless-offline 
+  # to run the canary deployment.
+  # Canary deployment is a kind of deployment where we are dividing the application into 2 sides.
+  # one half for beta testing and we provide the same to a small amount of customers
+  - serverless-plugin-canary-deployments
+  
+# adding below code so that the configuaration of lamda function is done individually, and the size is not big
+package:
+  individually: true 
 
 provider:
+
+  # enabled the tracing for the x- ray
+  tracing:
+    lambda: true
+    apiGateway: true 
+
   name: aws
   runtime: nodejs12.x
   stage : ${opt:stage,'dev'}
@@ -31,6 +48,10 @@ provider:
     # the below code is for the secret though the secret manager
     # AUTH_0_SECRET_ID: Auth0Secret-${self:provider.stage}
     # AUTH_0_SECRET_FIELD: auth0Secret
+
+    # adding a variable IS_OFFLINE, so that we know tht whether we running the server locally or not, 
+    # if the value is true, then we are going to crete the dynamo db instance locally, else it wll not be a local instance
+    IS_OFFLINE: false
 
   iamRoleStatements:
     - Effect: Allow
@@ -76,6 +97,13 @@ provider:
     #   Action: 
     #     - kms:Decrypt
     #   Resource: !GetAtt KMSKey.Arn 
+    # the below permission is for the code deployment as part of canary deployment
+    - Effect: Allow
+      Action: 
+        - codedeploy:*
+      Resource:
+        - '*'
+        
 
 
 custom:
@@ -99,6 +127,20 @@ custom:
         schema: ${file(models/create-image-request.json)}
     
   topicName: imagesTopic-${self:provider.stage}
+
+  # configuration of the serverless app to run locally 
+  serverless-offline:
+    port: 3003
+  
+  dynamodb:
+    stages:
+      - dev
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+    
+
 functions:
   GetGroups:
     handler: src/lambda/http/getGroups.handler
@@ -107,6 +149,7 @@ functions:
           method: get
           path: Groups
           cors: true
+     
         
   CreateGroup:
     handler: src/lambda/http/createGroups.handler
@@ -122,7 +165,11 @@ functions:
             description: Create a new group
             requestModels:
               'application/json': GroupRequest
-    
+    # adding configuration setting for canary deployment
+    deploymentSettings:
+      type: Linear10PercentEvery1Minute
+      alias: Live
+
   GetImages:
     handler: src/lambda/http/getImages.handler
     events:
@@ -233,8 +280,10 @@ resources:
             AttributeType: S
           - AttributeName: imageId 
             AttributeType: S
-          - AttributeName: title 
-            AttributeType: S
+          # we can add the title if want to , but it cannot be added for dynamo db local. 
+          #In dynamo db local#. we need to have the same attributes as that of key schema
+          #- AttributeName: title 
+          #  AttributeType: S
         KeySchema:
           - AttributeName: groupId
             KeyType: HASH

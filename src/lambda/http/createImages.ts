@@ -3,7 +3,11 @@ import 'source-map-support/register'
 import * as AWS from 'aws-sdk'
 import * as uuid from 'uuid'
 
-const docClient = new AWS.DynamoDB.DocumentClient()
+import  *  as AWSXRay from 'aws-xray-sdk'
+
+const XAWS = AWSXRay.captureAWS(AWS)
+
+const docClient = new XAWS.DynamoDB.DocumentClient()
 
 const groupTable = process.env.GROUP_TABLE
 const imageTable = process.env.IMAGE_TABLE
