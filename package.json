@@ -7,7 +7,9 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "aws-serverless-express": "^3.3.8",
     "aws-xray-sdk": "^3.0.1",
+    "express": "^4.17.1",
     "jimp": "^0.10.3",
     "jsonwebtoken": "^8.5.1",
     "serverless-dynamodb-local": "^0.2.30",
