@@ -11,7 +11,7 @@
     "aws-xray-sdk": "^3.0.1",
     "express": "^4.17.1",
     "jimp": "^0.10.3",
-    "jsonwebtoken": "^8.5.1",
+    "jsonwebtoken": "^9.0.0",
     "serverless-dynamodb-local": "^0.2.30",
     "source-map-support": "^0.5.10"
   },
